@@ -1,0 +1,574 @@
+{
+  "name": "VCG PMO Reporting Agent - PoC",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "51fcd7f7-96ae-4736-8ae4-72f3343a442d",
+      "name": "Manual Run (demo)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                5
+              ],
+              "triggerAtHour": 16
+            }
+          ]
+        }
+      },
+      "id": "f628cd3a-f3b5-4c5c-9afe-d0b050d112a8",
+      "name": "Weekly Reporting Deadline",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -320,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n/*  STEP 1 — COLLECT ENTERPRISE DATA\n *  In production these are six live connectors. For the PoC each\n *  block below stands in for one source system, with the same\n *  field shape the real connector would return.\n *\n *    projectSystem   -> Project / PSA platform  (plan, % complete, milestones)\n *    financeSystem   -> ERP / Finance           (budget, actuals, feed timestamp)\n *    resourceSystem  -> Resource Management     (roles, vacancies)\n *    raidLog         -> RAID register           (risks, issues, actions)\n *    priorReport     -> Document repository     (last approved report)\n *\n *  Four projects are seeded so that every branch of the workflow\n *  is exercised in a single run.\n */\n\nconst reportDate = '2026-09-06';\nconst reportingPeriod = '2026-W36';\n\nconst portfolio = [\n\n  // ── 1. Complete data, genuinely troubled -> should draft a RED report\n  {\n    projectId: 'VCG-1184',\n    projectName: 'Meridian Bank \\u2014 Core Banking Modernisation',\n    practice: 'Technology',\n    engagementPartner: 'A. Raghavan',\n    projectManager: 'S. Iyer',\n    projectSystem: {\n      plannedPctComplete: 62,\n      actualPctComplete: 55,\n      milestones: [\n        { name: 'Mobilisation',             baseline: '2026-05-12', forecast: '2026-05-12', status: 'Complete' },\n        { name: 'Current-state assessment', baseline: '2026-06-20', forecast: '2026-06-24', status: 'Complete' },\n        { name: 'Target architecture',      baseline: '2026-07-18', forecast: '2026-07-25', status: 'Complete' },\n        { name: 'UAT Cycle 1 sign-off',     baseline: '2026-08-24', forecast: '2026-09-07', status: 'At risk' },\n        { name: 'Go-live readiness',        baseline: '2026-10-30', forecast: '2026-11-16', status: 'Not started' }\n      ]\n    },\n    financeSystem: {\n      budgetInr: 24000000,\n      actualCostInr: 16800000,\n      feedAsOf: '2026-09-05'\n    },\n    resourceSystem: {\n      plannedFte: 14,\n      actualFte: 12,\n      vacancies: [ { role: 'Solution Architect', openDays: 21 } ]\n    },\n    raidLog: [\n      { ref: 'R-07', type: 'Risk',  severity: 'High',   status: 'Open',   summary: 'Legacy data migration scope larger than assessed at mobilisation' },\n      { ref: 'I-03', type: 'Issue', severity: 'High',   status: 'Open',   summary: 'Client SME availability below agreed allocation since mid-August' },\n      { ref: 'R-11', type: 'Risk',  severity: 'Medium', status: 'Open',   summary: 'Third-party payment gateway certification timeline unconfirmed' },\n      { ref: 'A-14', type: 'Action',severity: 'Medium', status: 'Overdue',summary: 'Confirm revised UAT entry criteria with client test lead' }\n    ],\n    priorReport: { period: '2026-W35', ragStatus: 'Amber', pctComplete: 52 },\n    varianceExplained: true\n  },\n\n  // ── 2. Complete data, healthy -> should draft a GREEN report\n  {\n    projectId: 'VCG-1207',\n    projectName: 'Kestrel Logistics \\u2014 Network Cost Optimisation',\n    practice: 'Supply Chain',\n    engagementPartner: 'M. Fernandes',\n    projectManager: 'D. Kulkarni',\n    projectSystem: {\n      plannedPctComplete: 40,\n      actualPctComplete: 41,\n      milestones: [\n        { name: 'Mobilisation',        baseline: '2026-07-06', forecast: '2026-07-06', status: 'Complete' },\n        { name: 'Baseline cost model', baseline: '2026-08-14', forecast: '2026-08-13', status: 'Complete' },\n        { name: 'Scenario design',     baseline: '2026-09-25', forecast: '2026-09-25', status: 'In progress' },\n        { name: 'Implementation plan', baseline: '2026-11-06', forecast: '2026-11-06', status: 'Not started' }\n      ]\n    },\n    financeSystem: {\n      budgetInr: 11000000,\n      actualCostInr: 4200000,\n      feedAsOf: '2026-09-04'\n    },\n    resourceSystem: {\n      plannedFte: 6,\n      actualFte: 6,\n      vacancies: []\n    },\n    raidLog: [\n      { ref: 'R-02', type: 'Risk', severity: 'Medium', status: 'Open', summary: 'Depot-level volume data quality varies across three regions' }\n    ],\n    priorReport: { period: '2026-W35', ragStatus: 'Green', pctComplete: 37 },\n    varianceExplained: true\n  },\n\n  // ── 3. Finance feed stale -> should route to the MISSING DATA exception\n  {\n    projectId: 'VCG-1233',\n    projectName: 'Northwind Retail \\u2014 Store Operating Model',\n    practice: 'Operations',\n    engagementPartner: 'P. Sundaram',\n    projectManager: 'R. Chandra',\n    projectSystem: {\n      plannedPctComplete: 28,\n      actualPctComplete: 26,\n      milestones: [\n        { name: 'Mobilisation',       baseline: '2026-08-03', forecast: '2026-08-03', status: 'Complete' },\n        { name: 'Store diagnostics',  baseline: '2026-09-18', forecast: '2026-09-18', status: 'In progress' },\n        { name: 'Operating model v1', baseline: '2026-10-23', forecast: '2026-10-23', status: 'Not started' }\n      ]\n    },\n    financeSystem: {\n      budgetInr: 8500000,\n      actualCostInr: null,          // ERP posting run failed\n      feedAsOf: '2026-08-19'        // 18 days stale\n    },\n    resourceSystem: {\n      plannedFte: 5,\n      actualFte: 5,\n      vacancies: []\n    },\n    raidLog: [\n      { ref: 'R-01', type: 'Risk', severity: 'Low', status: 'Open', summary: 'Regional manager interview scheduling slower than planned' }\n    ],\n    priorReport: { period: '2026-W35', ragStatus: 'Green', pctComplete: 22 },\n    varianceExplained: true\n  },\n\n  // ── 4. Complete data but no baseline + unexplained swing -> LOW CONFIDENCE\n  {\n    projectId: 'VCG-1251',\n    projectName: 'Halcyon Pharma \\u2014 R&D Portfolio Review',\n    practice: 'Strategy',\n    engagementPartner: 'N. Bhatt',\n    projectManager: 'T. Menon',\n    projectSystem: {\n      plannedPctComplete: 15,\n      actualPctComplete: 9,\n      milestones: [\n        { name: 'Mobilisation',      baseline: '2026-08-31', forecast: '2026-09-04', status: 'Complete' },\n        { name: 'Pipeline data room',baseline: '2026-10-09', forecast: '2026-10-09', status: 'In progress' }\n      ]\n    },\n    financeSystem: {\n      budgetInr: 15000000,\n      actualCostInr: 2850000,\n      feedAsOf: '2026-09-04'\n    },\n    resourceSystem: {\n      plannedFte: 8,\n      actualFte: 7,\n      vacancies: [ { role: 'Life Sciences SME', openDays: 9 } ]\n    },\n    raidLog: [\n      { ref: 'R-04', type: 'Risk', severity: 'Medium', status: 'Open', summary: 'Scope of therapeutic areas in review not yet confirmed by client' }\n    ],\n    priorReport: null,              // first reporting cycle - no baseline\n    varianceExplained: false        // cost run-rate swing has no logged cause\n  }\n\n];\n\nreturn portfolio.map(p => ({\n  json: { reportDate, reportingPeriod, ...p }\n}));\n"
+      },
+      "id": "49cc676e-ab1a-4174-8e5d-1804e51f8526",
+      "name": "1. Collect Enterprise Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n/*  STEP 2 — VALIDATE DATA COMPLETENESS\n *  Gate before any analysis runs. The agent must never draft a\n *  status report on incomplete or stale source data.\n */\n\nconst STALENESS_LIMIT_DAYS = 7;\n\nconst p = $json;\nconst missing = [];\n\n// Mandatory fields from each source system\nif (p.projectSystem?.plannedPctComplete == null) missing.push('projectSystem.plannedPctComplete');\nif (p.projectSystem?.actualPctComplete  == null) missing.push('projectSystem.actualPctComplete');\nif (!p.projectSystem?.milestones?.length)        missing.push('projectSystem.milestones');\nif (p.financeSystem?.budgetInr          == null) missing.push('financeSystem.budgetInr');\nif (p.financeSystem?.actualCostInr      == null) missing.push('financeSystem.actualCostInr');\nif (p.resourceSystem?.actualFte         == null) missing.push('resourceSystem.actualFte');\nif (!Array.isArray(p.raidLog))                   missing.push('raidLog');\n\n// Freshness check on the finance feed\nconst dayMs   = 86400000;\nconst feedAge = Math.round(\n  (new Date(p.reportDate) - new Date(p.financeSystem?.feedAsOf ?? p.reportDate)) / dayMs\n);\nconst stale = feedAge > STALENESS_LIMIT_DAYS;\nif (stale) missing.push(`financeSystem.feedAsOf (stale by ${feedAge - STALENESS_LIMIT_DAYS}d)`);\n\nreturn [{\n  json: {\n    ...p,\n    financeFeedAgeDays: feedAge,\n    missingFields: missing,\n    dataComplete: missing.length === 0,\n    validationNote: missing.length === 0\n      ? 'All mandatory inputs present and within freshness tolerance.'\n      : `Blocked: ${missing.length} input(s) missing or stale.`\n  }\n}];\n"
+      },
+      "id": "ef6e4e18-a84c-40ae-b7c6-14d19b7ff935",
+      "name": "2. Validate Data Completeness",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7bbd592e-d6cf-44a1-abb0-84408fe91a1c",
+              "leftValue": "={{ $json.dataComplete }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f18b59ef-9442-47b0-b3d2-d5675a4168f3",
+      "name": "DECISION: Data Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n/*  STEP 3 — DETECT VARIANCE, ANOMALIES AND CONFIDENCE\n *  All numbers the report will quote are computed HERE, deterministically.\n *  The language model is only allowed to narrate these figures - it is\n *  never asked to calculate. That is what keeps the agent auditable.\n */\n\nconst p = $json;\nconst dayMs = 86400000;\n\n// ── Schedule performance\nconst spi = p.projectSystem.actualPctComplete / p.projectSystem.plannedPctComplete;\nconst schedulePctVariance = p.projectSystem.actualPctComplete - p.projectSystem.plannedPctComplete;\n\n// ── Milestone slippage\nconst slipped = p.projectSystem.milestones\n  .map(m => ({\n    name: m.name,\n    status: m.status,\n    slipDays: Math.round((new Date(m.forecast) - new Date(m.baseline)) / dayMs)\n  }))\n  .filter(m => m.slipDays > 0);\n\nconst worstSlipDays = slipped.length ? Math.max(...slipped.map(m => m.slipDays)) : 0;\n\n// ── Cost performance (earned value)\nconst earnedValueInr = p.financeSystem.budgetInr * (p.projectSystem.actualPctComplete / 100);\nconst cpi            = earnedValueInr / p.financeSystem.actualCostInr;\nconst costVarianceInr= Math.round(earnedValueInr - p.financeSystem.actualCostInr);\nconst budgetConsumedPct = +(100 * p.financeSystem.actualCostInr / p.financeSystem.budgetInr).toFixed(1);\n\n// ── Resource position\nconst fteGap    = p.resourceSystem.plannedFte - p.resourceSystem.actualFte;\nconst vacancies = p.resourceSystem.vacancies ?? [];\n\n// ── RAID position\nconst openHigh = p.raidLog.filter(r => r.severity === 'High'   && r.status === 'Open');\nconst overdue  = p.raidLog.filter(r => r.status === 'Overdue');\n\n// ── RAG rules (deterministic, documented, auditable)\nconst redRule   = spi < 0.90 || cpi < 0.85 || worstSlipDays > 10 || openHigh.length >= 2;\nconst amberRule = spi < 0.97 || cpi < 0.95 || worstSlipDays > 3  || openHigh.length === 1 || fteGap > 0;\nconst ragStatus = redRule ? 'Red' : (amberRule ? 'Amber' : 'Green');\n\nconst ragMovement = p.priorReport\n  ? (p.priorReport.ragStatus === ragStatus ? 'No change' : `${p.priorReport.ragStatus} \\u2192 ${ragStatus}`)\n  : 'No prior period';\n\n// ── Confidence scoring — can the agent defend its own conclusion?\nlet confidence = 1.0;\nconst confidenceNotes = [];\nif (!p.priorReport)             { confidence -= 0.30; confidenceNotes.push('no prior-period baseline'); }\nif (!p.varianceExplained)       { confidence -= 0.25; confidenceNotes.push('cost/schedule variance has no logged cause'); }\nif (p.financeFeedAgeDays > 3)   { confidence -= 0.10; confidenceNotes.push('finance feed older than 3 days'); }\nif (p.projectSystem.milestones.length < 3) { confidence -= 0.10; confidenceNotes.push('fewer than 3 tracked milestones'); }\nconfidence = +Math.max(0, confidence).toFixed(2);\n\nconst CONFIDENCE_THRESHOLD = 0.65;\n\nreturn [{\n  json: {\n    ...p,\n    analysis: {\n      spi: +spi.toFixed(3),\n      cpi: +cpi.toFixed(3),\n      schedulePctVariance,\n      slippedMilestones: slipped,\n      worstSlipDays,\n      earnedValueInr: Math.round(earnedValueInr),\n      costVarianceInr,\n      budgetConsumedPct,\n      fteGap,\n      vacancies,\n      openHighSeverity: openHigh,\n      overdueActions: overdue,\n      ragStatus,\n      ragMovement\n    },\n    confidence,\n    confidenceNotes,\n    confidenceSufficient: confidence >= CONFIDENCE_THRESHOLD\n  }\n}];\n"
+      },
+      "id": "57e1ead8-66ea-4434-8aff-558e386e82c6",
+      "name": "3. Detect Variance & Anomalies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "83a7ce5a-2460-4bc6-b4e2-a2d4fe1b1cdb",
+      "name": "EXCEPTION: Missing Data → PM",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        660,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "729935eb-e18c-4b1d-bf76-492eebc65e9d",
+              "leftValue": "={{ $json.confidenceSufficient }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2f0e764b-cbf0-4ff9-a419-1b8dc4439aa8",
+      "name": "DECISION: Confidence Sufficient?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "2c4ca633-8e34-437b-9a0a-d26e6ba69fbb",
+      "name": "EXCEPTION: Low Confidence → Human Review",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the drafting component of Vertex Consulting Group's PMO Reporting Agent. You produce the first draft of a weekly project status report for review by the Project Manager.\n\nSTRICT RULES\n1. Every figure you state must come from the ANALYSIS block below. Do not calculate, estimate, round differently, or introduce any number that is not given to you.\n2. Do not invent causes. If a variance has no logged cause in the RAID register, say the cause is not yet established.\n3. The RAG status is already determined by rule. Report it. Do not override it.\n4. Write for an engagement partner: factual, short sentences, no filler, no marketing language.\n5. If you are uncertain about anything, put it under OPEN QUESTIONS FOR PM rather than guessing.\n\nPROJECT\nProject: {{ $json.projectName }} ({{ $json.projectId }})\nPractice: {{ $json.practice }} | Partner: {{ $json.engagementPartner }} | PM: {{ $json.projectManager }}\nReporting period: {{ $json.reportingPeriod }} (as at {{ $json.reportDate }})\n\nANALYSIS (authoritative - all figures must come from here)\nRAG status: {{ $json.analysis.ragStatus }} ({{ $json.analysis.ragMovement }})\nSchedule: {{ $json.projectSystem.actualPctComplete }}% complete against {{ $json.projectSystem.plannedPctComplete }}% planned (SPI {{ $json.analysis.spi }}, variance {{ $json.analysis.schedulePctVariance }} points)\nCost: {{ $json.analysis.budgetConsumedPct }}% of budget consumed, CPI {{ $json.analysis.cpi }}, cost variance INR {{ $json.analysis.costVarianceInr }}\nSlipped milestones: {{ JSON.stringify($json.analysis.slippedMilestones) }}\nResource gap: {{ $json.analysis.fteGap }} FTE | Vacancies: {{ JSON.stringify($json.analysis.vacancies) }}\nOpen high-severity RAID: {{ JSON.stringify($json.analysis.openHighSeverity) }}\nOverdue actions: {{ JSON.stringify($json.analysis.overdueActions) }}\nFull RAID register: {{ JSON.stringify($json.raidLog) }}\nAgent confidence: {{ $json.confidence }}\n\nOUTPUT FORMAT — use exactly these headings, plain text, no markdown symbols:\n\nSTATUS\nOne line: RAG status and movement from prior period.\n\nEXECUTIVE SUMMARY\nThree to four sentences. What is the position, what changed, what it means for delivery.\n\nSCHEDULE\nProgress against plan and any milestone slippage, with dates and day counts.\n\nFINANCIALS\nBudget consumed, cost performance, and what the variance implies for the remaining budget.\n\nRISKS AND ISSUES\nThe open high-severity items and overdue actions, each with its reference.\n\nRECOMMENDED ACTIONS\nTwo to four specific actions, each with a suggested owner role.\n\nESCALATIONS FOR ENGAGEMENT LEAD\nOnly items that genuinely need partner-level decision. Write \"None this period\" if there are none.\n\nOPEN QUESTIONS FOR PM\nAnything you could not determine from the data provided. Write \"None\" if there are none.",
+        "messages": {
+          "messageValues": []
+        }
+      },
+      "id": "82fbee53-8857-45c4-a6c3-62bebced896a",
+      "name": "4. Generate Draft PMO Report",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        1160,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "563df751-4687-44f6-ad17-789eb03a9337",
+      "name": "Google Gemini (free API key)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "PMO Reporting Agent — Project Manager review",
+        "formDescription": "Check factual accuracy, project context, variance explanations and action ownership before this report goes to the Engagement Lead.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approve"
+                  },
+                  {
+                    "option": "Reject - return to agent with corrections"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Reviewer comments",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Reviewer name",
+              "fieldType": "text"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "531d22d9-9574-494a-887a-218a84e48556",
+      "name": "5. HUMAN GATE: Project Manager",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        120
+      ],
+      "webhookId": "9fcb6104-1add-4b81-b3f4-9589f25a7a72"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ef09fe1e-586c-4ca3-94e5-c38481d69e16",
+              "leftValue": "={{ $json.Decision === 'Approve' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c3f979a2-929a-4177-b710-3e294cf08636",
+      "name": "DECISION: PM Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        120
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3886adec-d723-433d-882d-dcae3f1f5164",
+      "name": "Return to Agent with Corrections",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1940,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "PMO Reporting Agent — Engagement Lead sign-off",
+        "formDescription": "Check consistency with portfolio reporting, material escalations, governance and executive messaging.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approve"
+                  },
+                  {
+                    "option": "Reject - return to agent with corrections"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Reviewer comments",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Reviewer name",
+              "fieldType": "text"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a5698f2a-d9f8-4ff3-ab86-f87ef4c59405",
+      "name": "6. HUMAN GATE: PMO / Engagement Lead",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1940,
+        20
+      ],
+      "webhookId": "9b122d59-6f6a-4d98-8b6f-2bbd4aac30e3"
+    },
+    {
+      "parameters": {},
+      "id": "d9a56693-2ef1-4330-8ec4-3778294629fb",
+      "name": "7. Publish to Repository & Distribute",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        20
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "87b93349-013a-41a0-8aca-eb66008b7b21",
+      "name": "8. Learning Loop: Log Corrections",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## PMO Reporting Agent — Proof of Concept\n**Vertex Consulting Group | Phase-1 GenAI Portfolio**\n\nFour seeded projects exercise every branch in one run:\n- **VCG-1184** Meridian Bank — complete data, troubled → drafts a RED report\n- **VCG-1207** Kestrel Logistics — complete data, healthy → drafts a GREEN report\n- **VCG-1233** Northwind Retail — finance feed 18 days stale → **missing-data exception**\n- **VCG-1251** Halcyon Pharma — no baseline + unexplained variance → **low-confidence exception**",
+        "height": 300,
+        "width": 720,
+        "color": 4
+      },
+      "id": "bed9db5b-367e-4e7d-9c14-ee5b07552a8d",
+      "name": "Note 13b260",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Design principle\n\nAll figures are computed **deterministically** in Step 3.\n\nThe language model is only permitted to *narrate* those figures — it never calculates.\n\nThis is what makes the agent auditable, and it is the reason two human gates are enough.",
+        "height": 200,
+        "width": 420,
+        "color": 3
+      },
+      "id": "f2968cdb-4595-46cf-b6e1-f67fecce06cf",
+      "name": "Note 351ba6",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        900,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Human-in-the-loop\n\nThe agent retrieves, analyses, drafts and checks.\n\nIt does **not** publish without both approvals, and it holds no write access to source systems.",
+        "height": 180,
+        "width": 400,
+        "color": 5
+      },
+      "id": "1cf2bc47-d099-4723-a017-4c4ff5312fa7",
+      "name": "Note 86fa0b",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        -220
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Run (demo)": {
+      "main": [
+        [
+          {
+            "node": "1. Collect Enterprise Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Reporting Deadline": {
+      "main": [
+        [
+          {
+            "node": "1. Collect Enterprise Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Collect Enterprise Data": {
+      "main": [
+        [
+          {
+            "node": "2. Validate Data Completeness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Validate Data Completeness": {
+      "main": [
+        [
+          {
+            "node": "DECISION: Data Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DECISION: Data Complete?": {
+      "main": [
+        [
+          {
+            "node": "3. Detect Variance & Anomalies",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "EXCEPTION: Missing Data → PM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Detect Variance & Anomalies": {
+      "main": [
+        [
+          {
+            "node": "DECISION: Confidence Sufficient?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DECISION: Confidence Sufficient?": {
+      "main": [
+        [
+          {
+            "node": "4. Generate Draft PMO Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "EXCEPTION: Low Confidence → Human Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini (free API key)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "4. Generate Draft PMO Report",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Generate Draft PMO Report": {
+      "main": [
+        [
+          {
+            "node": "5. HUMAN GATE: Project Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. HUMAN GATE: Project Manager": {
+      "main": [
+        [
+          {
+            "node": "DECISION: PM Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DECISION: PM Approved?": {
+      "main": [
+        [
+          {
+            "node": "6. HUMAN GATE: PMO / Engagement Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return to Agent with Corrections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. HUMAN GATE: PMO / Engagement Lead": {
+      "main": [
+        [
+          {
+            "node": "7. Publish to Repository & Distribute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Publish to Repository & Distribute": {
+      "main": [
+        [
+          {
+            "node": "8. Learning Loop: Log Corrections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
